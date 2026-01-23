@@ -9,6 +9,7 @@ class Settings:
         self.screen_height = self.board_height*(self.square_side+1)+40
 
         self.bg_color = (130, 130, 130)
+        self.score_color = (255, 255, 255)
         self.color_1 = (196, 30, 30)
         self.color_2 = (30, 196, 30)
         self.color_3 = (30, 30, 196)
@@ -16,4 +17,6 @@ class Settings:
         self.color_5 = (30, 196, 196)
         self.color_empty = (200, 200, 200)
 
-        self.sleep_time = 0.3
+        self.sleep_time = 0.5
+
+        self.font = pygame.font.SysFont(None, 35)

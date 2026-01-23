@@ -1,87 +1,77 @@
-import random, time
+import random, time, copy
 
 class Board:
     def __init__(self, game):
         self.settings = game.settings
-        self.board = self._generate_valid_board()
+        self.board = [[random.randint(1, 5) for _ in range(
+            self.settings.board_width)]
+            for _ in range(self.settings.board_height)]
+        #self.board[5][5] = 0
+        #self.board[0][0] = 0
+        #self.board[4][5] = 0
         self.selected = None
         self.game = game
+        self.sb = game.sb
 
-    def _generate_valid_board(self):
-        board = []
-        for i in range(self.settings.board_height):
-            row = []
-            for j in range(self.settings.board_width):
-                available = [1, 2, 3, 4, 5]
-                if j >= 2 and row[j-1] == row[j-2]:
-                    if row[j-1] in available:
-                        available.remove(row[j-1])
-                if i >= 2 and board[i-1][j] == board[i-2][j]:
-                    if board[i-1][j] in available:
-                        available.remove(board[i-1][j])
-                row.append(random.choice(available))
-            board.append(row)
-        return board
+    def _check_empty(self):
+        empty = []
+        for x in range(len(self.board)):
+            for y in range(len(self.board[0])):
+                if self.board[x][y] == 0:
+                    empty.append((x, y))
+        return empty
+
+    def try_get(self, x, y):
+        if x >= 0 and y >= 0:
+            try:
+                return self.board[x][y]
+            except:
+                return
 
     def _check_eliminate(self):
-        eliminated = False
-        to_eliminate = set()
+        eliminate_poses = set()
+        for x in range(len(self.board)):
+            for y in range(len(self.board[0])):
+                center = self.board[x][y]
+                up_x = x-1
+                down_x = x+1
+                left_y = y-1
+                right_y = y+1
+                up = self.try_get(up_x, y)
+                down = self.try_get(down_x, y)
+                left = self.try_get(x, left_y)
+                right = self.try_get(x, right_y)
+                if center == up == down:
+                    eliminate_poses.add((up_x, y))
+                    eliminate_poses.add((x, y))
+                    eliminate_poses.add((down_x, y))
+                if center == left == right:
+                    eliminate_poses.add((x, left_y))
+                    eliminate_poses.add((x, y))
+                    eliminate_poses.add((x, right_y))
+        return eliminate_poses
 
-        for x in range(self.settings.board_height):
-            count = 1
-            for y in range(1, self.settings.board_width):
-                if self.board[x][y] == self.board[x][y-1] and self.board[x][y] != 0:
-                    count += 1
-                else:
-                    if count >= 3:
-                        for i in range(count):
-                            to_eliminate.add((x, y-1-i))
-                    count = 1
-            if count >= 3:
-                for i in range(count):
-                    to_eliminate.add((x, self.settings.board_width-1-i))
-
-        for y in range(self.settings.board_width):
-            count = 1
-            for x in range(1, self.settings.board_height):
-                if self.board[x][y] == self.board[x-1][y] and self.board[x][y] != 0:
-                    count += 1
-                else:
-                    if count >= 3:
-                        for i in range(count):
-                            to_eliminate.add((x-1-i, y))
-                    count = 1
-            if count >= 3:
-                for i in range(count):
-                    to_eliminate.add((self.settings.board_height-1-i, y))
-
-        if to_eliminate:
-            eliminated = True
-
-            for x, y in to_eliminate:
+    def eliminate(self):
+        eliminates = self._check_eliminate()
+        if eliminates:
+            for x, y in eliminates:
                 self.board[x][y] = 0
+                self.sb.score += 10
+            self.update()
+            return True
 
-            self.game._update_screen()
-            time.sleep(self.settings.sleep_time)
-
-            self._apply_gravity()
-
-            self.game._update_screen()
-            time.sleep(self.settings.sleep_time)
-
-            self._check_eliminate()
-        
-        return eliminated
-
-    def _apply_gravity(self):
-        for y in range(self.settings.board_width):
-            write_pos = self.settings.board_height - 1
-            for read_pos in range(self.settings.board_height - 1, -1, -1):
-                if self.board[read_pos][y] != 0:
-                    self.board[write_pos][y] = self.board[read_pos][y]
-                    if write_pos != read_pos:
-                        self.board[read_pos][y] = 0
-                    write_pos -= 1
-
-            for x in range(write_pos + 1):
+    def update(self):
+        self.game._update_screen()
+        time.sleep(self.settings.sleep_time)
+        empty = self._check_empty()
+        if empty:
+            for x, y in empty:
+                while x > 0:
+                    (self.board[x][y], self.board[x-1][y]) = \
+                    (self.board[x-1][y], self.board[x][y])
+                    x -= 1
                 self.board[x][y] = random.randint(1, 5)
+            self.update()
+        else:
+            return self.eliminate()
+        return True
