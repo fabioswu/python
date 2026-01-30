@@ -2,6 +2,8 @@
 import pygame
 import sys
 import random
+import math
+
 
 SCREEN_WIDTH = 800
 SCREEN_HEIGHT = 600
@@ -202,6 +204,69 @@ def draw_instructions(surface, show_instructions):
             text = font_tiny.render(line, True, WHITE)
             surface.blit(text, (SCREEN_WIDTH - 210, SCREEN_HEIGHT - 110 + i * 25))
 
+# 小球碰撞检测函数
+def check_brick_collision(ball_rect, ball_speed_x, ball_speed_y, brick_rect):
+    """
+    检测小球与砖块的碰撞，返回反弹方向和是否碰撞
+    """
+    """
+    # 角碰撞检测：
+    # 获取小球和砖块的位置信息
+    bx, by = ball_rect.centerx, ball_rect.centery
+    brick_x, brick_y = brick_rect.x, brick_rect.y
+    brick_w, brick_h = brick_rect.width, brick_rect.height
+    
+    # 计算小球到砖块四个角的距离
+    corners = [
+        (brick_x, brick_y),  # 左上角
+        (brick_x + brick_w, brick_y),  # 右上角
+        (brick_x, brick_y + brick_h),  # 左下角
+        (brick_x + brick_w, brick_y + brick_h)  # 右下角
+    ]
+    
+    # 检查是否碰撞到角
+    for corner in corners:
+        dx = bx - corner[0]
+        dy = by - corner[1]
+        distance = math.sqrt(dx*dx + dy*dy)
+        
+        if distance < ball_rect.width / 2:  # 假设小球是圆形
+            # 角碰撞，同时反弹x和y方向
+            return True, -ball_speed_x, -ball_speed_y
+    """
+    
+    # 边碰撞检测：
+    # 计算小球和砖块的相对位置
+    ball_center = pygame.Vector2(ball_rect.center)
+    brick_center = pygame.Vector2(brick_rect.center)
+    
+    # 计算重叠区域
+    overlap_x = min(ball_rect.right, brick_rect.right) - max(ball_rect.left, brick_rect.left)
+    overlap_y = min(ball_rect.bottom, brick_rect.bottom) - max(ball_rect.top, brick_rect.top)
+    
+    if overlap_x <= 0 or overlap_y <= 0:
+        return False, ball_speed_x, ball_speed_y
+    
+    # 根据重叠区域的较小边判断主要碰撞方向
+    if overlap_x < overlap_y:
+        # 水平方向碰撞（左或右）
+        if ball_center.x < brick_center.x:
+            # 从左侧碰撞
+            ball_speed_x = -abs(ball_speed_x)
+        else:
+            # 从右侧碰撞
+            ball_speed_x = abs(ball_speed_x)
+    else:
+        # 垂直方向碰撞（上或下）
+        if ball_center.y < brick_center.y:
+            # 从上方碰撞
+            ball_speed_y = -abs(ball_speed_y)
+        else:
+            # 从下方碰撞
+            ball_speed_y = abs(ball_speed_y)
+    
+    return True, ball_speed_x, ball_speed_y
+
 
 # 预渲染星空背景
 star_positions = [(random.randint(0, SCREEN_WIDTH), random.randint(0, SCREEN_HEIGHT)) for _ in range(50)]
@@ -305,10 +370,13 @@ def game_loop():
             # 小球碰到砖块 → 砖块消失+小球反弹+增加分数
             for brick, color in bricks[:]:  # 切片遍历（避免删除时索引异常）
                 if ball.colliderect(brick):
-                    bricks.remove((brick, color))  # 删除被碰到的砖块
-                    ball_speed_y *= -1     # 小球y方向反弹
-                    score += 10  # 增加分数
-                    break  # 避免一次碰到多个砖块
+                    collision, new_speed_x, new_speed_y = check_brick_collision(ball, ball_speed_x, ball_speed_y, brick)
+                    if collision:
+                        bricks.remove((brick, color))  # 删除被碰到的砖块
+                        ball_speed_x, ball_speed_y = new_speed_x, new_speed_y
+                        #ball_speed_y *= -1     # 小球y方向反弹
+                        score += 10  # 增加分数
+                        break  # 避免一次碰到多个砖块
 
             # 检查是否所有砖块都被消除
             if len(bricks) == 0:
