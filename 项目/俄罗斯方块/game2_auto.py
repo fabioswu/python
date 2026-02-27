@@ -2,6 +2,8 @@ import pygame
 import random
 import os
 import copy
+import math
+from collections import deque
 
 pygame.init()
 
@@ -28,10 +30,10 @@ CUBE_COLORS = [
 screen = pygame.display.set_mode((SCREEN_WIDTH, HEIGHT))
 pygame.display.set_caption("俄罗斯方块 - 自动模式")
 clock = pygame.time.Clock()
-FPS = 180
+FPS = 120
 
 score = 0
-level = 1
+level = 2
 lineCount = [0,0,0,0]
 auto_mode = False  # 自动模式开关
 auto_move_counter = 0
@@ -39,17 +41,19 @@ auto_move_interval = 5  # 自动移动间隔帧数
 best_move_path = []  # 存储最佳移动路径
 
 screen_color_matrix = [[None] * GRID_NUM_WIDTH for i in range(GRID_NUM_HEIGHT)]
+score_table = deque(maxlen = 4000)
 
 # 设置游戏的根目录为当前文件夹
 base_folder = os.path.dirname(__file__)
 
 
 def show_text(surf, text, size, x, y, color=WHITE):
-    font_name = os.path.join(base_folder, '方圆体.ttc')
-    try:
-        font = pygame.font.Font(font_name, size)
-    except:
-        font = pygame.font.Font(None, size)
+    #font_name = os.path.join(base_folder, '方圆体.ttc')
+    #try:
+    #    font = pygame.font.Font(font_name, size)
+    #except:
+    #    font = pygame.font.Font(None, size)
+    font = pygame.font.SysFont("simhei", size)
     text_surface = font.render(text, True, color)
     text_rect = text_surface.get_rect()
     text_rect.midtop = (x, y)
@@ -57,7 +61,7 @@ def show_text(surf, text, size, x, y, color=WHITE):
 
 
 class CubeShape(object):
-    SHAPES = ['I', 'J', 'L', 'O', 'S', 'T', 'Z']
+    SHAPES = ['I', 'J', 'L', 'O', 'S', 'T', 'Z', 'S']
     I = [[(0, -1), (0, 0), (0, 1), (0, 2)],
          [(-1, 0), (0, 0), (1, 0), (2, 0)]]
     J = [[(-2, 0), (-1, 0), (0, 0), (0, -1)],
@@ -89,7 +93,7 @@ class CubeShape(object):
     def __init__(self):
         self.shape = self.SHAPES[random.randint(0, len(self.SHAPES) - 1)]
         #if self.shape == 'I': # 降低I型出现的概率
-        #    self.shape = self.SHAPES[random.randint(0, 3)]
+        #    self.shape = self.SHAPES[random.randint(0, 1)]
         # 骨牌所在的行列
         self.center = (2, GRID_NUM_WIDTH // 2)
         self.dir = random.randint(0, len(self.SHAPES_WITH_DIR[self.shape]) - 1)
@@ -196,8 +200,16 @@ class CubeShape(object):
                             (cube[1] * GRID_WIDTH, cube[0] * GRID_WIDTH,
                              GRID_WIDTH, GRID_WIDTH),
                             1, 2)  # 2像素的虚线边框
-
-
+    def draw_next(self):
+        for cube in self.get_all_gridpos():
+            pygame.draw.rect(screen, self.color,
+                             (cube[1] * GRID_WIDTH + SCREEN_WIDTH // 2, cube[0] * GRID_WIDTH + GRID_WIDTH,
+                              GRID_WIDTH, GRID_WIDTH))
+            pygame.draw.rect(screen, WHITE,
+                             (cube[1] * GRID_WIDTH + SCREEN_WIDTH // 2, cube[0] * GRID_WIDTH + GRID_WIDTH,
+                              GRID_WIDTH, GRID_WIDTH),
+                             1)
+            
 class TetrisAI:
     """俄罗斯方块AI"""
     
@@ -207,6 +219,8 @@ class TetrisAI:
     def evaluate_position(self, matrix, must_fill):
         """评估当前位置的分数"""
         score = 0
+
+        sp = [0] * 9
 
         # 1. 计算高度（越低越好）
         max_height = 0
@@ -225,8 +239,8 @@ class TetrisAI:
                 if screen_color_matrix[row][col] is not None:
                     height_table1[col] = GRID_NUM_HEIGHT - row
                     break
-            
-        score -= max_height * 20
+        sp[0] = max_height * 20 if max_height < 20 else max_height * 30
+        score -= max_height * 20 if max_height < 20 else max_height * 30
         
         #for col in range(GRID_NUM_WIDTH):
         #    height_table[col] = max_height - height_table[col]
@@ -234,19 +248,19 @@ class TetrisAI:
         #avg = sum(height_table1[2:-2]) // (GRID_NUM_WIDTH - 4)
         threshold = 9 if max_height < 14 else 6
         # deepwells = sum(num > threshold for num in height_table)
-        if (must_fill == 'right' and (height_table[-2] - height_table[-1] < 3)) or\
-           (must_fill == 'left' and (height_table[1] - height_table[0] < 3)):
-            score += 130000
-            print(f"双井填充 {height_table}")
             
         # 2. 计算完整行数（越多越好）
         complete_lines = 0
-        liveScores = [0, 0, 50, 300, 18000] if max_height < 14 else [0,5000,7000,9000,15000]
-        #liveScores = [0, 500, 1500, 3500, 18000] if max_height < 14 else [0,5000,7000,9000,15000]
+        #lines_with_one_none = 0;
+        liveScores = [0, 0, 50, 300, 180000] if max_height < 14 else [0,5000,7000,9000,150000]
+        #liveScores = [0, 1500, 3500, 7500, 18000] if max_height < 14 else [0,5000,7000,9000,15000]
         for row in range(GRID_NUM_HEIGHT):
             if all(matrix[row][col] is not None for col in range(GRID_NUM_WIDTH)):
                 complete_lines += 1
+            #if matrix[row].count(None) == 1:
+            #    lines_with_one_none += 1
         # score += complete_lines * 1000
+        sp[1] = liveScores[complete_lines]
         score += liveScores[complete_lines]
 
         # 3. 计算空洞数量（越少越好）
@@ -258,8 +272,8 @@ class TetrisAI:
                     found_block = True
                 elif found_block and matrix[row][col] is None:
                     holes += 1
-        
-        score -= holes * 150
+        sp[2] = holes * 250 #if max_height < 16 else holes * 100
+        score -= holes * 250 #if max_height < 16 else holes * 100
 
             
         # 4. 计算凹凸不平度（越平滑越好）
@@ -281,6 +295,7 @@ class TetrisAI:
         if (max_height > 17 and maxHeightDiff > 6) or (max_height < 17 and maxHeightDiff > 10):
             maxHeightDiff = 0
         score -= (bumpiness - maxHeightDiff) * 15
+        sp[3] = (bumpiness - maxHeightDiff) * 15
         
         # 5. 检查是否会制造井（避免在两侧都有方块的地方制造深井）
         wells = 0
@@ -304,10 +319,18 @@ class TetrisAI:
                         break
                 if current_height < min(left_height, right_height) - 2:
                     wells += (min(left_height, right_height) - current_height)
-        
+        sp[4] = 0 if max_height < 10 else wells * 30
         score -= 0 if max_height < 10 else wells * 30
         
-        return score
+        if (must_fill == 'right' and (height_table[-2] - height_table[-1] < 3)) or\
+           (must_fill == 'left' and (height_table[1] - height_table[0] < 3)):
+            score += 130000
+            sp[5] = 130000
+            print(f"双井填充 {height_table} {score}")
+        else:
+            sp[5] = 0
+        
+        return score, sp
 
     
     def simulate_drop(self, cube_shape, target_dir, target_x):
@@ -343,6 +366,7 @@ class TetrisAI:
         return new_matrix
     
     def find_best_move(self, cube_shape):
+        global score_table
         """寻找最佳移动"""
         best_score = -float('inf')
         best_move = None
@@ -358,7 +382,7 @@ class TetrisAI:
                 if screen_color_matrix[row][col] is not None:
                     h_table[col] = GRID_NUM_HEIGHT - row
                     break
-        if min(h_table[1] - h_table[0], h_table[-2] - h_table[-1]) > 3 and\
+        if min(h_table[2] - h_table[0], h_table[-3] - h_table[-1]) > 4 and\
            max(h_table[1] - h_table[0], h_table[-2] - h_table[-1]) > 5:
             if h_table[0] < h_table[-1]:
                 must_fill = 'right'
@@ -368,7 +392,7 @@ class TetrisAI:
                 must_fill = 'left' if h_table[1] - h_table[0] < h_table[-2] - h_table[-1] else 'right'
             print(f"双井[{must_fill}]{h_table}")
         
-
+        score_table.append(f"cube_shape:{cube_shape.shape}")
         # 遍历所有可能的旋转
         for rotation in range(num_rotations):
             # 创建测试方块并旋转
@@ -387,12 +411,15 @@ class TetrisAI:
 
                 if result_matrix is not None:
                     # 评估这个位置
-                    score = self.evaluate_position(result_matrix, must_fill)
+                    score, sl = self.evaluate_position(result_matrix, must_fill)
 
                     # 添加额外奖励：靠近中间位置
                     center_x = GRID_NUM_WIDTH // 2
                     distance_from_center = abs(x + shape_width // 2 - center_x)
-                    # score -= distance_from_center * 2
+                    score -= distance_from_center * 2
+                    sl[6] = distance_from_center * 2
+                    sl[7] = score
+                    score_table.append(sl.copy())
                     if score > best_score:
 
                         best_score = score
@@ -401,6 +428,8 @@ class TetrisAI:
                         # 计算移动路径
                         path = self.calculate_move_path(cube_shape, rotation, x)
                         best_path = path
+                    sl[8] = best_score
+                    score_table.append(sl.copy())
         return best_move, best_path
     
     def calculate_move_path(self, cube_shape, target_rotation, target_x):
@@ -476,26 +505,25 @@ def draw_matrix():
                                  (j * GRID_WIDTH, i * GRID_WIDTH,
                                   GRID_WIDTH, GRID_WIDTH), 2)
 
-
 def draw_score():
-    show_text(screen, u'得分：{}'.format(score), 20, WIDTH + SIDE_WIDTH // 2, 100)
-    show_text(screen, u'等级：{}'.format(level), 20, WIDTH + SIDE_WIDTH // 2, 150)
-    show_text(screen, u'{}'.format(lineCount), 20, WIDTH + SIDE_WIDTH // 2, 50)
+    show_text(screen, u'{}'.format(lineCount), 18, WIDTH + SIDE_WIDTH // 2, 170)
+    show_text(screen, u'得分：{}'.format(score), 20, WIDTH + SIDE_WIDTH // 2, 200)
+    show_text(screen, u'等级：{}'.format(level - 1), 20, WIDTH + SIDE_WIDTH // 2, 230)
     
     # 显示自动模式状态
     mode_color = GREEN if auto_mode else RED
     mode_text = "自动模式" if auto_mode else "手动模式"
     show_text(screen, u'模式：{}'.format(mode_text), 20, 
-              WIDTH + SIDE_WIDTH // 2, 200, mode_color)
+              WIDTH + SIDE_WIDTH // 2, 265, mode_color)
     
     # 显示操作说明
-    show_text(screen, u'操作说明：', 18, WIDTH + SIDE_WIDTH // 2, 250)
-    show_text(screen, u'← → : 左右移动', 16, WIDTH + SIDE_WIDTH // 2, 280)
-    show_text(screen, u'↑ : 旋转', 16, WIDTH + SIDE_WIDTH // 2, 305)
-    show_text(screen, u'↓ : 加速下落', 16, WIDTH + SIDE_WIDTH // 2, 330)
-    show_text(screen, u'空格 : 硬降落', 16, WIDTH + SIDE_WIDTH // 2, 355)
-    show_text(screen, u'A : 切换自动模式', 16, WIDTH + SIDE_WIDTH // 2, 380)
-    show_text(screen, u'ESC : 退出', 16, WIDTH + SIDE_WIDTH // 2, 405)
+    show_text(screen, u'操作说明：', 18, WIDTH + SIDE_WIDTH // 2, 300)
+    show_text(screen, u'← → : 左右移动', 16, WIDTH + SIDE_WIDTH // 2, 330)
+    show_text(screen, u'↑ : 旋转', 16, WIDTH + SIDE_WIDTH // 2, 355)
+    show_text(screen, u'↓ : 加速下落', 16, WIDTH + SIDE_WIDTH // 2, 380)
+    show_text(screen, u'空格 : 硬降落', 16, WIDTH + SIDE_WIDTH // 2, 405)
+    show_text(screen, u'A : 切换自动模式', 16, WIDTH + SIDE_WIDTH // 2, 430)
+    show_text(screen, u'ESC : 退出', 16, WIDTH + SIDE_WIDTH // 2, 455)
 
 
 def remove_full_line():
@@ -519,7 +547,7 @@ def remove_full_line():
         else:
             n_full_line += 1
     score += bonus_score[n_full_line]
-    level = score // 20 + 1 if level < FPS else FPS
+    level = score // 20 + 2 if level < (FPS // 2 + 1) else (FPS // 2 + 1)
     screen_color_matrix = new_matrix
     if n_full_line > 0:
         lineCount[n_full_line-1] += 1
@@ -540,8 +568,11 @@ running = True
 gameover = True
 counter = 0
 live_cube = None
+next_cube = None
 move_counter = 0
 pause = False
+printed = False
+temp_pause = 0
 while running:
     clock.tick(FPS)
 
@@ -552,32 +583,45 @@ while running:
             if gameover:
                 gameover = False
                 live_cube = CubeShape()
+                next_cube = CubeShape()
                 auto_mode = False  # 游戏重新开始时默认手动模式
                 best_move_path = []  # 重置路径
                 lineCount = [0,0,0,0]
                 counter = 0
                 score = 0
+                level = 2
                 screen_color_matrix = [[None] * GRID_NUM_WIDTH for i in range(GRID_NUM_HEIGHT)]
+                printed = False
+                pause = False
                 break
             
             if event.key == pygame.K_a:  # A键切换自动模式
                 auto_mode = not auto_mode
                 best_move_path = []  # 切换模式时重置路径
                 auto_move_counter = 0
+                printed = False
+            elif event.key == pygame.K_RETURN or event.key == pygame.K_KP_ENTER :
+                pause = not pause
             
             if not auto_mode:  # 手动模式下的控制
                 if live_cube is not None:
                     if event.key == pygame.K_LEFT:
                         live_cube.left()
-                        counter -= 1
+                        if temp_pause <= 0 :
+                            counter = 1
+                            temp_pause = level
                     elif event.key == pygame.K_RIGHT:
                         live_cube.right()
-                        counter -= 1
+                        if temp_pause <= 0 :
+                            counter = 1
+                            temp_pause = level
                     elif event.key == pygame.K_DOWN:
                         live_cube.down()
                     elif event.key == pygame.K_UP:
                         live_cube.rotate()
-                        counter -= 1
+                        if temp_pause <= 0 :
+                            counter = 1
+                            temp_pause = level
                     elif event.key == pygame.K_SPACE:
                         live_cube.hard_drop()
                         # 方块放置到矩阵
@@ -585,7 +629,8 @@ while running:
                             screen_color_matrix[cube[0]][cube[1]] = live_cube.color
                         
                         # 创建新方块
-                        live_cube = CubeShape()
+                        live_cube = next_cube.copy()
+                        next_cube = CubeShape()
                         
                         # 检查游戏是否结束
                         if live_cube.conflict(live_cube.center):
@@ -596,8 +641,7 @@ while running:
                         
                         # 消除满行
                         remove_full_line()
-                    elif event.key == pygame.K_RETURN:
-                        pause = not pause
+
 
     if pause:
         continue
@@ -633,7 +677,8 @@ while running:
                         screen_color_matrix[cube[0]][cube[1]] = live_cube.color
                     
                     # 创建新方块
-                    live_cube = CubeShape()
+                    live_cube = next_cube.copy()
+                    next_cube = CubeShape()
                     
                     # 检查游戏是否结束
                     if live_cube.conflict(live_cube.center):
@@ -649,20 +694,24 @@ while running:
                     
 
     # 手动模式下的自动下落
-    if gameover is False and counter % (FPS // level) == 0 and not auto_mode:
+    if gameover is False and counter % (FPS // (level - 1)) == 0 and not auto_mode:
         if live_cube.down() == False:
             for cube in live_cube.get_all_gridpos():
                 screen_color_matrix[cube[0]][cube[1]] = live_cube.color
-            live_cube = CubeShape()
+            live_cube = next_cube.copy()
+            next_cube = CubeShape()
             if live_cube.conflict(live_cube.center):
                 gameover = True
                 live_cube = None
                 print("gameover live_cube.conflict 3")
                 # screen_color_matrix = [[None] * GRID_NUM_WIDTH for i in range(GRID_NUM_HEIGHT)]
         remove_full_line()
+
+    if temp_pause <= 0: 
+        counter += 1
+    else:
+        temp_pause -= math.log(level) + 1
         
-    counter += 1
-    
     # 绘制游戏界面
     screen.fill(BLACK)
     draw_grids()
@@ -674,9 +723,15 @@ while running:
         if auto_mode and best_move_path:
             live_cube.draw_ghost()
         live_cube.draw()
+        
+    if next_cube is not None and not auto_mode:
+        next_cube.draw_next()
     
     if gameover:
         show_welcome(screen)
+        if not printed:
+            printed = True
+            print(score_table)
     
     pygame.display.update()
 
